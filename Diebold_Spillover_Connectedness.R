@@ -1,7 +1,7 @@
 library(shiny)
 library(shinydashboard)
 
-source("C:\\Users\\Rhamey\\Desktop\\financeR\\spillover_connectedness_functions.R")
+#source("C:\\Users\\Rhamey\\Desktop\\financeR\\spillover_connectedness_functions.R")
 
 
 ui <-dashboardPage(
@@ -43,7 +43,7 @@ ui <-dashboardPage(
                 fluidRow(tableOutput("connected_table")),
                 fluidRow(tableOutput("spillover_table"))),
        tabPanel(title = "Pairwise Plot",
-                fluidRow(uiOutput("sender_tickers"),uiOutput("receiver_tickers")),
+                fluidRow(uiOutput("sender_tickers"),uiOutput("receiver_tickers"))),
        tabPanel(title = "Returns Data",
                 fluidRow(plotOutput("return_data_plot")),
                 fluidRow(tableOutput("return_table"))),
