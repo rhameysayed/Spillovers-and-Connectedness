@@ -1,10 +1,11 @@
 ---
 title: "Measuring Volatility Spillovers and Connectedness"
 output: 
+  html_document: 
+    keep_md: yes
   html_notebook:
     code_folding: hide
     mathjax: default
-    keep_md: true
 ---
 
 ### NOTE:
@@ -25,16 +26,16 @@ The data is pulled from Yahoo! Finance using the getSymbols() function from the 
   \sigma^2_{it} = 0.361[ln(P^{max}_{it}) - ln(P^{min}_{it}))]^2 
 \end{equation} 
 
-Then the annualized daily percent standard deviation is:
+Since voltatilities are skewed, it is use log-volatilites which are usually normally distributed. However, to control for instances when volatility is zero $sinh_{-1}$ is used instead of taking the log; moreover, $sinh_{-1}(x) = log(2x)$.
 
 \begin{equation} 
-  \sigma_{it} = 100 \sqrt{252*\sigma^2_{it}}
+  \sigma_{it} = sinh_{-1}(\sqrt{252*\sigma^2_{it}})
   \label{eq:stdev}
 \end{equation}
 
 Using the quantmod getSymbols function, read in the set of stock prices for a period of time. Then calculate their daily volatilities.
 
-```{r echo=FALSE,message=FALSE}
+```{r echo=FALSE,message=FALSE,warning=FALSE}
 source("C:\\Users\\Rhamey\\Desktop\\financeR\\spillover_connectedness_functions.R")
 library(kableExtra)
 
