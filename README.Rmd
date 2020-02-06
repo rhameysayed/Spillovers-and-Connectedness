@@ -3,6 +3,8 @@ title: "Measuring Volatility Spillovers and Connectedness"
 output: 
   html_document: 
     keep_md: yes
+    code_folding: hide
+    mathjax: default
   html_notebook:
     code_folding: hide
     mathjax: default
@@ -26,10 +28,10 @@ The data is pulled from Yahoo! Finance using the getSymbols() function from the 
   \sigma^2_{it} = 0.361[ln(P^{max}_{it}) - ln(P^{min}_{it}))]^2 
 \end{equation} 
 
-Since voltatilities are skewed, it is use log-volatilites which are usually normally distributed. However, to control for instances when volatility is zero $sinh_{-1}$ is used instead of taking the log; moreover, $sinh_{-1}(x) = log(2x)$.
+Since voltatilities are skewed, it is common practice to use log-volatilites which closely approximate a normally distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of taking the log ($sinh^{-1}(x) = log(2x)$).
 
 \begin{equation} 
-  \sigma_{it} = sinh_{-1}(\sqrt{252*\sigma^2_{it}})
+  \sigma_{it} = sinh^{-1}(\sqrt{252*\sigma^2_{it}})
   \label{eq:stdev}
 \end{equation}
 
@@ -68,6 +70,13 @@ kable(data_summary) %>% kable_styling(bootstrap_options = c("striped", "hover", 
 
 ```
 
+```{r fig.width=14,fig.height=8}
+chart.TimeSeries(vol.data,lwd=2,auto.grid=F,ylab="Annualized Log Volatility",xlab="Time",
+                     main="Log Volatility",lty=1,
+                     legend.loc="topright")
+```
+
+
 ## Section 3: Full Sample Analysis
 ## Section 3.1: Basic Time-Series: VAR(p), MA(q), Impulse-Response, FEVD
 
@@ -80,7 +89,7 @@ In time-series analysis (and most regressions generally) the most interesting in
 
 Where $R_{it}$ is the return on stock $i$ at time $t$ and $\Sigma_M$ is the market return (i.e. the return on the S&P 500, Dow Jones, etc.), $\beta$ is a measure of the systematic portion of a stock's return, or the strength/measure of its relationship with the broader market, and $\epsilon$ is the idiosyncratic portion. The interesting question is how responsive is the future volatility $\sigma_{i,t+1}$, at time $t+1$, to a unit shock of $\epsilon_{it}$? And in a system of several different returns, how does a shock to the idiosyncratic term $\epsilon_{jt}$ for variable $j$ at time $t$ effect $\sigma_{i,t+1}$ for variable $i$ at time $t+1$? In other words, we are interested in finding whether and how idiosyncratic risks of one stock effcts others. These effects are known as spillovers or connectedness.
 
-In order to derive a measure of these spillovers, the calculations will proceed in four steps: 1) Estimate a VAR for a set of $N$ variables of $\Sigma_i$ for $i = 1,..,N$ variables which will replace $\Sigma_M$; 2) convert the VAR into a moving average representation of order q (MA(q)); 3) derive the impulse-response function for each variable using the MA(q) for each variable $j$ on variable $i$; 4) calculate FEVD matrix for the entire set of variables using the impulse-response function. For textbook treatment of how this is done algebraically, see [Zivot](https://faculty.washington.edu/ezivot/econ584/notes/varModels.pdf), [Cochrane Chapter 7](http://econ.lse.ac.uk/staff/wdenhaan/teach/cochrane.pdf), and [Pesaran and Shin 1997](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.153.5596&rep=rep1&type=pdf) Section 2 for estimating both correlated an uncorrelated shocks.
+In order to derive a measure of these spillovers, the calculations will proceed in four steps: 1) Estimate a VAR for a set of $N$ variables of $\sigma_i$ for $i = 1,..,N$ variables which will replace $\sigma_M$; 2) convert the VAR into a moving average representation of order q (MA(q)); 3) derive the impulse-response function for each variable using the MA(q) for each variable $j$ on variable $i$; 4) calculate FEVD matrix for the entire set of variables using the impulse-response function. For textbook treatment of how this is done algebraically, see [Zivot](https://faculty.washington.edu/ezivot/econ584/notes/varModels.pdf), [Cochrane Chapter 7](http://econ.lse.ac.uk/staff/wdenhaan/teach/cochrane.pdf), and [Pesaran and Shin 1997](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.153.5596&rep=rep1&type=pdf) Section 2 for estimating both correlated an uncorrelated shocks.
 
 ## Section 3.2: Full Sample Spillover Table
 ### Step 1. Vector Autoregression (VAR)
@@ -106,6 +115,7 @@ svar_theta_temp <- Phi(vol_svar,nstep = MA_lag)
 theta.list <- alply(theta_temp,3)
 svar_theta_list <- alply(svar_theta_temp,3)
 ```
+
 ### Step 3 Impulse Response Function (IRF)
 
 The function fevd.matrix implements the IRF and FEVD calculations, taking the VAR residuals and MA coefficients as inputs. For the IRF first calculate the covariance of the residuals, then find the lower-triangular Cholesky-decomposition of the residuals' covariance matrix. The values of this matrix are the "shocks" to the system. 
@@ -172,7 +182,7 @@ This is the Spillover Table. The row sums (excluding the diagonal terms) measure
 
 ## Section 3.3: Full Sample Connectedness Table
 
-Connectedness requires similar calculations, except that the shocks from IRF are no longer assumed orthogonal. To achieve this, the lower triangular matrix $P$ for $\theat^o_{ij}$ in the numerator is replaced by the covariance matrix of the residuals. The generalized FEVD equation is then,
+Connectedness requires similar calculations, except that the shocks from IRF are no longer assumed orthogonal. To achieve this, the lower triangular matrix $P$ for $\theta^o_{ij}$ in the numerator is replaced by the covariance matrix of the residuals. The generalized FEVD equation is then,
 
 \begin{equation}
   \theta^g_{ij} = \frac{\sigma^{-1}_{ii} \sum^n_{l=0} (e'_i A_l \Sigma e_j)^2}{\sum^n_{l=0} (e'_i A_l \Sigma A'_l e_i)}
@@ -484,7 +494,9 @@ ggplot(to.tbl) +
   facet_wrap(~variable,scales="free_y") +
   theme(legend.position = "bottom")
 ```
+
 ### Receiving
+
 ```{r, fig.width=14,fig.height=12}
 ggplot(from.tbl) + 
   geom_line(aes(x=Date,y=Connectedness),colour="black") +
@@ -492,7 +504,9 @@ ggplot(from.tbl) +
   facet_wrap(~variable,scales="free_y") +
   theme(legend.position = "bottom")
 ```
+
 ### Net
+
 ```{r, fig.width=14,fig.height=12}
 ggplot(net.tbl) + 
   geom_line(aes(x=Date,y=Connectedness),colour="black") +
@@ -500,6 +514,7 @@ ggplot(net.tbl) +
   facet_wrap(~variable,scales="free_y") +
   theme(legend.position = "bottom")
 ```
+
 ## Section 4.3: Rolling Window Net Pairwise Spillovers & Connectedness
 
 Using the connectedness measure, it is also possible to compare two stocks and see which one was the net giver or receiver. For instance if we compare the Morgan Stanley (MS) and Goldman Sachs (GS), it appears that Morgan Stanley "gave" volatility to Goldman Sachs for most of the time considered.
