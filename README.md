@@ -2,7 +2,7 @@
 title: "Measuring Volatility Spillovers and Connectedness"
 output: 
   html_document: 
-    keep_md: yes
+    output: github_document
     code_folding: hide
     mathjax: default
 ---
