@@ -1,8 +1,8 @@
 ---
 title: "Measuring Volatility Spillovers and Connectedness"
 output: 
-  html_document: 
-    keep_md: yes
+  html_document:
+    output: github_document
     code_folding: hide
     mathjax: default
   html_notebook:
@@ -25,10 +25,12 @@ The data is pulled from Yahoo! Finance using the getSymbols() function from the 
 
 \begin{equation}
   \label{eq:variance}
-  \sigma^2_{it} = 0.361[ln(P^{max}_{it}) - ln(P^{min}_{it}))]^2 
+  \sigma^2_{it} = 0.361[ln(P^{max}_{i,t}) - ln(P^{min}_{i,t-1}))]^2 
 \end{equation} 
 
-Since voltatilities are skewed, it is common practice to use log-volatilites which closely approximate a normally distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of taking the log ($sinh^{-1}(x) = log(2x)$).
+To be able to analyze the volatility of closed-end mutual funds the minimum price is observed at $t-1$. Otherwise, returns and volatilities for these funds would be zero.
+
+Since voltatilities are skewed, it is common practice to use log-volatilites which closely approximate a normally distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of taking the log ($sinh^{-1}(x) = log(2x)$). 
 
 \begin{equation} 
   \sigma_{it} = sinh^{-1}(\sqrt{252*\sigma^2_{it}})
@@ -52,11 +54,17 @@ getSymbols(tickers1,src="yahoo",from=as.POSIXct(start_date),to=as.POSIXct(end_da
 
 ### Calculate daily volatility using Open and Close prices
 ### This formula is found in section 3 of DY 2010
-vol.fn <- function(history){100*sqrt(252*0.361*log(history[,3]/history[,2])^2)}
+vol.fn <- function(history){asinh(sqrt(252*0.361*log(history[,3]/lag(history[,2]))^2))}
 vol1 <- lapply(data1,vol.fn)
+
+###other functions
+cumulative_return <- function(closing){100*((closing[,4]/as.numeric(closing[1,4]))-1)}
+log_prices <- function(closing){log(closing[,4])}
+simple.ret <- function(closing) {100*((closing[,4]-lag(closing[,4]))/lag(closing[,4]))}
 
 ## combine each ticker's xts object into one xts object
 vol.data <- Reduce(merge.all,vol1)
+vol.data <- na.omit(vol.data)
 ## remove the suffixes from the names
 vol1.names = colnames(vol.data)
 newNames = sapply(as.character(vol1.names),function(x) substr(x,1,nchar(x)-4))
@@ -137,10 +145,9 @@ fevd.matrix <- function(resid.var,ma.coef){
   ### ei and ej are identity matrices, or
   ### each column in ei and ej is a vector with unity at the i/jth element
   ### see equation 2.7 in Pesaran and Shin (1997)
-  cov.error <- resid.var
-  Qinv <- t(chol(cov.error))
+  Qinv <- t(chol(resid.var))
   
-  nobs <- dim(cov.error)[1]
+  nobs <- dim(Qinv)[1]
   ei <- diag(nobs)
   ej <- diag(nobs)
   
@@ -154,7 +161,7 @@ fevd.matrix <- function(resid.var,ma.coef){
     ### to estimate FEVD on page 3 of Pesaran and Shin (1997)
     ejj <- ej[,j]
     
-    denom.step1 <- llply(ma.coef,function(x) t(ejj)%*%x%*%cov.error%*%t(x)%*%ejj)
+    denom.step1 <- llply(ma.coef,function(x) t(ejj)%*%x%*%resid.var%*%t(x)%*%ejj)
     denom = Reduce('+',denom.step1)
     for(i in 1:(ncol(ej))){
       ### the following steps calculates equation 2.10 in Pesaran and Shin (1997)
@@ -245,32 +252,36 @@ The interpretation of the table as well as the calculation for net pairwise conn
 ## Section 3.4: Full Sample FEVD as a Network
 
 DY 2011 demonstrates that variance decompositions define weighted, directed networks. Thus the Connectedness table can be transformed into a network as shown below. (To see how the network evolves over time, use the app here: (insert link))
+
 ```{r echo=FALSE, message=FALSE, fig.width=9,fig.height=9}
 net.mat = t(D) - D
 net.melt1 <- melt(net.mat)
 net.melt <- net.melt1 %>% filter(value != 0 )
+colnames(net.melt)[3] <- "weight"
 
 ### calculate each percentile of the net pairwise connectedness values
 ### and choose only the top 10%
-net.quant <- quantile(net.melt$value,prob=seq(0,1,by=0.01))
-new.net1 <- net.melt[net.melt$value > net.quant[90],]
+net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
+new.net1 <- net.melt[net.melt$weight >= net.quant[75],]
 new.net <- new.net1[new.net1[,1] != new.net1[,2],]
 
 ### create igraph graph
 net.network <- graph.data.frame(new.net,direct=T)
+#net.network <- set_edge_attr(net.network, "weight", value= new.net$weight)
+E(net.network)$weight <- as.numeric(new.net$weight)
 ### set graph nodes
-V(net.network)
+#V(net.network)
 ### set edge colors
-E(net.network)$color <- ifelse(E(net.network)$value >= net.quant[99],"black",
-                             ifelse((E(net.network)$value < net.quant[99] & E(net.network)$value >= net.quant[95]),"red",
-                                    ifelse((E(net.network)$value < net.quant[95] & E(net.network)$value >= net.quant[90]),"orange","grey")))
+E(net.network)$color <- ifelse(E(net.network)$weight >= net.quant[99],"black",
+                             ifelse(E(net.network)$weight < net.quant[99] & E(net.network)$weight >= net.quant[95],"red",
+                                    ifelse(E(net.network)$weight < net.quant[95] & E(net.network)$weight >= net.quant[90],"orange","blue")))
 
 ### set node size
 V(net.network)$size <- degree(net.network)/.5
 
 plot(net.network,layout=layout.circle(net.network),
      main="Firm Connectedness \n (intra day return volatility)",
-     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n node size: number of edeges connected to the node")
+     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 25th percentile \n node size: number of edeges connected to the node")
 
 ```
 
@@ -289,6 +300,7 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
   
   model_list <- vector("list",length=length(date_names))
   names(model_list) <- date_names
+  centrality <- model_list
   ### initialize a list to hold index values
   fevd.list <- vector("list",length=length(date_names))
   ### names of the list come from the index of .xts data object
@@ -364,21 +376,32 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
     net.mat = t(abs.D) - abs.D
     net.melt1 <- melt(net.mat)
     net.melt <- net.melt1 %>% filter(value != 0 )
+    colnames(net.melt)[3] <- "weight"
 
     ### calculate each percentile of the net pairwise connectedness values
     ### and choose only the top 10%
-    net.quant <- quantile(net.melt$value,prob=seq(0,1,by=0.01))
-    new.net1 <- net.melt[net.melt$value > net.quant[90],]
+    net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
+    new.net1 <- net.melt[net.melt$weight > net.quant[90],]
     new.net <- new.net1[new.net1[,1] != new.net1[,2],]
     
     ### create igraph graph
+    total_network <- graph.data.frame(net.melt,direct=T)
+    E(total_network)$weight <- as.numeric(net.melt$weight)
+    
+    net_clo <- centr_clo(total_network)$centralization
+    net_betw <- centr_betw(total_network,directed = TRUE,normalized = F)$centralization
+    net_deg <- centr_degree(total_network,mode="total")$centralization
+    
+    centrality[[date_names[d]]] <- list(clo = net_clo,betw = net_betw,deg = net_deg)
+    
     net.network <- graph.data.frame(new.net,direct=T)
+    E(net.network)$weight <- as.numeric(new.net$weight)
     ### set graph nodes
-    V(net.network)
+    #V(net.network)
     ### set edge colors
-    E(net.network)$color <- ifelse(E(net.network)$value >= net.quant[99],"black",
-                                   ifelse((E(net.network)$value < net.quant[99] & E(net.network)$value >= net.quant[95]),"red",
-                                          ifelse((E(net.network)$value < net.quant[95] & E(net.network)$value >= net.quant[90]),"orange","grey")))
+    E(net.network)$color <- ifelse(E(net.network)$weight >= net.quant[99],"black",
+                                   ifelse(E(net.network)$weight < net.quant[99] & E(net.network)$weight >= net.quant[95],"red",
+                                          ifelse(E(net.network)$weight < net.quant[95] & E(net.network)$weight >= net.quant[90],"orange","blue")))
     
     ### set node size
     V(net.network)$size <- degree(net.network)/.5
@@ -395,6 +418,7 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
        conn=vol.conn.index,
        nets = network.list,
        net_df = net.df.list,
+       centrality = centrality,
        dates = date_names)
   
 }
@@ -545,3 +569,219 @@ ggplot(pairwise_data,aes(x=Time,y=Connectedness,group=1)) +
   xlab("Time") + 
   ylab("Connectedness")
 ```
+
+## Section 5: Monetary Transmission
+
+Research from [Niepmann & Schmidt-Eisenlohr](https://voxeu.org/article/when-dollar-appreciates-us-corporate-credit-tightens) shows that when the US dollar appreciates business loan terms tighten. The main reason for this is that banks often package and sell their business loans in capital markets to Collateralized Loan Obligations (CLO) insurance companies, mutual funds, hedge funds, and sometimes other banks, which can have exposure to foreign exchange markets. Hence, when the dollar appreciates these entities will buy fewer business loans, and this lack of demand causes banks to tighten loan terms so as to offer better returns in the capital markets. This development is significant for several reasons, but perhaps the most salient point is that accroding to economic theory currency appreciation is associated with asset higher returns (i.e. interest rates), as this graph from [Krugman, Obstfeld, and Melitz](https://www.amazon.com/International-Economics-Theory-Policy-Pearson/dp/0133423646) demonstrates:
+
+![International Economics: Theory and Policy](C:\\Users\\Rhamey\\Desktop\\financeR\\ConnectedNess\\krugman_obstfeld.png)
+
+Using the methodology above and few proxies for relevant financial assets we can get an idea of how connected loan demand and foreign exchange are. According to theory when interest rates the dollar will appreciate and lower returns, hence a proxy investment for dollar exchange rate, relative to EMs and developed markets, and money market returns is necessary. To measure the transmission of emerging markets to CLOs it is necessary need measure the returns for buyers and sellers of CLOs. Tthe price of oil is an [important factor](https://www.bankofcanada.ca/wp-content/uploads/2010/05/wp10-5.pdf) driving exchange rates, thus the price of WTI will be necessary. Finally, Citibank, JP Morgan, and Wells Fargo are among the largest sellers (buyer in Citibank's case) as discussed in a [note from S&P](https://www.spglobal.com/marketintelligence/en/news-insights/latest-news-headlines/leveraged-loan-news/those-700b-in-us-clos-who-holds-them-what-risk-they-pose). 
+
+Luckily there is an ETF for everything. Consider the following:
+
+```{r echo=FALSE,message=FALSE}
+tickers <- c("BSCK","VCSH","USO","LEMB","FXCH","UUP","FFRHX","OXLC","C","WFC","JPM")
+desc <- c("Money Market Proxy (ETF)","Money Market Proxy (ETF)","Light, sweet crude (ETF)","Emerging Market Currencies (excl. China) (ETF)","Chinese/USD Yuan (ETF)","USD Index relative to developed economies (ETF)","Fidelity Floating Rate High Income Fund (Closed-End Fund)","Oxford Lane Corporation (Closed End Fund)","Citibank","Wells Fargo","JP Morgan Chase & Co.")
+
+tickerTable <- data.frame(Ticker=tickers,Description=desc)
+kable(tickerTable) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+tickers <- tickers[order(tickers)]
+
+start_date = "2012-04-02"
+end_date = "2020-01-31"
+
+dat2 <- new.env()
+getSymbols(tickers,
+               src="yahoo",
+               from=start_date,
+               to = end_date,
+               env=dat2)
+    
+logprices <- lapply(dat2,log_prices)
+logprices <- Reduce(merge.all,logprices)
+
+
+cum_returns <- lapply(dat2,cumulative_return)
+cum_returns <- Reduce(merge.all,cum_returns)
+
+rets <- lapply(dat2,simple.ret)
+vol <- lapply(dat2,vol.fn)
+## combine each ticker's xts object into one xts object
+vol.data <- Reduce(merge.all,vol)
+vol.data <- na.omit(vol.data)
+ret.data <- Reduce(merge.all,rets)
+ret.data <- na.omit(ret.data)
+
+ret1.names <- colnames(vol.data)
+## replace names with actual ticker symbols
+newNames <- sapply(as.character(ret1.names),function(x) substr(x,1,nchar(x)-4))
+colnames(ret.data) <- newNames
+colnames(vol.data) <- newNames
+colnames(cum_returns) <- newNames
+colnames(logprices) <- newNames
+    
+all_data <- list(log_price = logprices,
+         returns = ret.data,
+         cum_returns = cum_returns,
+         return_vol = vol.data)
+
+monetary_transmission <- vector_autoreg(vol.data)
+
+```
+
+## Price History (Log Prices)
+
+First, the black line in the graph that falls precipitously is USO (oil), the other black line is UUP (USD exhange rate with other developed economies), and the green line at the bottom is Oxford Lane Capital, a purchaser of CLO securities. Of course the dollar and oil are negatively correlated, but it should be surprising that the prices of oil and OXLC move together. Moreover, it appears that as the dollar appreciates against the yen (FXHC, top blue line) and other emerging markets (LEMB, pink line) OXLC also falls in price.
+
+```{r fig.width=14,fig.height=12}
+
+chart.TimeSeries(all_data[["log_price"]],lwd=2,auto.grid=F,ylab="Log Prices",xlab="Time",
+                     main="Log Prices",lty=1,
+                     legend.loc="topright")
+```
+
+## Cumulative Returns
+
+```{r fig.width=14,fig.height=12}
+chart.TimeSeries(all_data[["cum_returns"]],lwd=2,auto.grid=F,ylab="Cumulative Returns",xlab="Time",
+                     main="Returns (%)",lty=1,
+                     legend.loc="topright")
+```
+                     
+## Daily Volatility
+
+```{r fig.width=14,fig.height=12}
+chart.TimeSeries(all_data[["return_vol"]],lwd=2,auto.grid=F,ylab="Annualized Log Volatility",xlab="Time",
+                     main="Log Volatility",lty=1,
+                     legend.loc="topright")
+```
+
+## Daily Returns
+
+```{r fig.width=14,fig.height=12}
+chart.TimeSeries(all_data[["returns"]],lwd=2,auto.grid=F,ylab="Return (%)",xlab="Time",
+                     main="Daily Return Percentage",lty=1,
+                     legend.loc="topright")
+```
+
+### Network
+
+```{r}
+vol_var = VAR(vol.data,p=3,type="none")
+amat <- diag(ncol(vol.data))
+amat[lower.tri(amat)] <- NA
+### extract residuals of the VAR
+res_t <- residuals(vol_var)
+MA_lag <- 10
+theta_temp <- Phi(vol_var,nstep = MA_lag)
+### extract MA coefficients
+theta.list <- alply(theta_temp,3)
+dir.mat <- directional.matrix(res_t,theta.list)
+rownames(dir.mat) <- colnames(vol.data)
+colnames(dir.mat) <- rownames(dir.mat)
+
+D <- normalize(dir.mat)*100
+df.list <- make.table(D,rownames(D),start_date)
+df.list <- round(df.list[["table"]],2)
+
+kable(df.list) %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+```{r fig.width=14,fig.height=12}
+net.mat = t(D) - D
+net.melt1 <- melt(net.mat)
+net.melt <- net.melt1 %>% filter(value != 0 )
+colnames(net.melt)[3] <- "weight"
+
+### calculate each percentile of the net pairwise connectedness values
+### and choose only the top 10%
+net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
+new.net1 <- net.melt[net.melt$weight >= net.quant[75],]
+new.net <- new.net1[new.net1[,1] != new.net1[,2],]
+
+### create igraph graph
+net.network <- graph.data.frame(new.net,direct=T)
+#net.network <- set_edge_attr(net.network, "weight", value= new.net$weight)
+E(net.network)$weight <- as.numeric(new.net$weight)
+### set graph nodes
+#V(net.network)
+### set edge colors
+E(net.network)$color <- ifelse(E(net.network)$weight >= net.quant[99],"black",
+                             ifelse(E(net.network)$weight < net.quant[99] & E(net.network)$weight >= net.quant[95],"red",
+                                    ifelse(E(net.network)$weight < net.quant[95] & E(net.network)$weight >= net.quant[90],"orange","blue")))
+
+### set node size
+V(net.network)$size <- degree(net.network)/.5
+
+plot(net.network,layout=layout.circle(net.network),
+     main="Firm Connectedness \n (intra day return volatility)",
+     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 25th percentile \n node size: number of edeges connected to the node")
+```
+
+### Volatility Index
+
+Financial stocks are highly correlated, but it should come as a surprise that these variables are as connected as the index shows. However, the Connectedness Index is also very volatile here, falling from just over 80% to under 70% between 2015 - 2017, before jumping up above 80 again.
+
+```{r fig.width=14,fig.height=8}
+############## CONNECTEDNESS ################
+vol.conn.index.out <- monetary_transmission[["conn"]]
+### unlist output data
+vol.conn.index.df <- data.frame(unlist(vol.conn.index.out))
+colnames(vol.conn.index.df) = c("Index")
+### .xts object
+vol.conn.index.df$Date <- as.POSIXct(rownames(vol.conn.index.df),format="%Y-%m-%d")
+vol.conn.index.xts <- xts(vol.conn.index.df[,-2],order.by=vol.conn.index.df[,2])
+
+############## SPILLOVER ###################
+fevd.list.out <- monetary_transmission[["spill"]]
+
+fevd.df <- data.frame(unlist(fevd.list.out))
+colnames(fevd.df) = c("Index")
+fevd.df$Date <- as.POSIXct(rownames(fevd.df),format="%Y-%m-%d")
+fevd.xts <- xts(fevd.df[,-2],order.by=fevd.df[,2])
+
+### compare the two index measures
+indice = merge.all(vol.conn.index.xts,fevd.xts)
+colnames(indice) = c("Connectedness","Spillover")
+
+chart.TimeSeries(indice,lwd=2,auto.grid=F,ylab="Index",xlab="Time",
+                      main="Comparing Spillover Index levels",lty=1,
+                      legend.loc="topright")
+```
+
+### Net Volatility Connectedness
+
+The Net Volatility Connectedness and Spillovers show why the choice of assuming uncorrelated errors is not always wise. The prices of VCSH, FFRHX, and BSCK show hardly any signs of life, but the FEVD of these ETFs is high and volatile. In almost every other instance orthogonal errors assign an asset as giver (receiver) of volatility when the correlated errors assign the same asset as a receiver (giver). After considering these graphs, it is all the more surprising that both the Connectedness and Spillover indexes track each other as well as they do.
+
+```{r fig.width=14,fig.height=12}
+
+net.df.list <- monetary_transmission[["net_df"]]
+spill.df.list <- monetary_transmission[["spillover_table"]]
+
+net.cols <- names(net.df.list)
+net.selected.net.df.list <- llply(net.df.list,function(df){df[["Net"]]})
+net.selected.net.df <- as.data.frame(do.call(rbind,lapply(net.selected.net.df.list, function(x) t(data.frame(x)))))
+net.selected.net.df <- net.selected.net.df %>% mutate(Date = as.POSIXct(net.cols,format="%Y-%m-%d"))
+
+spill.cols <- names(spill.df.list)
+net.selected.spill.df.list <- llply(spill.df.list,function(df){df[["Net"]]})
+net.selected.spill.df <- as.data.frame(do.call(rbind,lapply(net.selected.spill.df.list, function(x) t(data.frame(x)))))
+net.selected.spill.df <- net.selected.spill.df %>% mutate(Date = as.POSIXct(spill.cols,format="%Y-%m-%d"))
+
+net.net.melt <- melt(net.selected.net.df,id="Date",value.name = "Connectedness")
+net.spill.melt <- melt(net.selected.spill.df,id="Date",value.name = "Spillover")
+net.tbl <- merge(net.net.melt,net.spill.melt,by=c("Date","variable"))
+    
+ggplot(net.tbl) + 
+  geom_line(aes(x=Date,y=Connectedness),colour="black") +
+  geom_line(aes(x=Date,y=Spillover),colour="red") +
+  facet_wrap(~variable,scales="free_y") +
+  theme(legend.position = "bottom")
+```
+
