@@ -25,10 +25,12 @@ The data is pulled from Yahoo! Finance using the getSymbols() function from the 
 
 \begin{equation}
   \label{eq:variance}
-  \sigma^2_{it} = 0.361[ln(P^{max}_{it}) - ln(P^{min}_{it}))]^2 
+  \sigma^2_{it} = 0.361[ln(P^{max}_{i,t}) - ln(P^{min}_{i,t-1}))]^2 
 \end{equation} 
 
-Since voltatilities are skewed, it is common practice to use log-volatilites which closely approximate a normally distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of taking the log ($sinh^{-1}(x) = log(2x)$).
+To be able to analyze the volatility of closed-end mutual funds the minimum price is observed at $t-1$. Otherwise, returns and volatilities for these funds would be zero.
+
+Since voltatilities are skewed, it is common practice to use log-volatilites which closely approximate a normally distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of taking the log ($sinh^{-1}(x) = log(2x)$). 
 
 \begin{equation} 
   \sigma_{it} = sinh^{-1}(\sqrt{252*\sigma^2_{it}})
@@ -783,11 +785,6 @@ The interpretation of the table as well as the calculation for net pairwise conn
 
 DY 2011 demonstrates that variance decompositions define weighted, directed networks. Thus the Connectedness table can be transformed into a network as shown below. (To see how the network evolves over time, use the app here: (insert link))
 
-```
-## + 13/13 vertices, named, from 7a96360:
-##  [1] AIG  C    BAC  BK   JPM  GS   MS   BNS  TD   HSBC DB   CS   WFC
-```
-
 ![](README_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
 
 ## Section 4: Rolling Window - Spillover Vs. Connected
@@ -806,6 +803,7 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
   
   model_list <- vector("list",length=length(date_names))
   names(model_list) <- date_names
+  centrality <- model_list
   ### initialize a list to hold index values
   fevd.list <- vector("list",length=length(date_names))
   ### names of the list come from the index of .xts data object
@@ -881,21 +879,32 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
     net.mat = t(abs.D) - abs.D
     net.melt1 <- melt(net.mat)
     net.melt <- net.melt1 %>% filter(value != 0 )
+    colnames(net.melt)[3] <- "weight"
 
     ### calculate each percentile of the net pairwise connectedness values
     ### and choose only the top 10%
-    net.quant <- quantile(net.melt$value,prob=seq(0,1,by=0.01))
-    new.net1 <- net.melt[net.melt$value > net.quant[90],]
+    net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
+    new.net1 <- net.melt[net.melt$weight > net.quant[90],]
     new.net <- new.net1[new.net1[,1] != new.net1[,2],]
     
     ### create igraph graph
+    total_network <- graph.data.frame(net.melt,direct=T)
+    E(total_network)$weight <- as.numeric(net.melt$weight)
+    
+    net_clo <- centr_clo(total_network)$centralization
+    net_betw <- centr_betw(total_network,directed = TRUE)$centralization
+    net_deg <- centr_degree(total_network,mode="total")$centralization
+    
+    centrality[[date_names[d]]] <- list(clo = net_clo,betw = net_betw,deg = net_deg)
+    
     net.network <- graph.data.frame(new.net,direct=T)
+    E(net.network)$weight <- as.numeric(new.net$weight)
     ### set graph nodes
-    V(net.network)
+    #V(net.network)
     ### set edge colors
-    E(net.network)$color <- ifelse(E(net.network)$value >= net.quant[99],"black",
-                                   ifelse((E(net.network)$value < net.quant[99] & E(net.network)$value >= net.quant[95]),"red",
-                                          ifelse((E(net.network)$value < net.quant[95] & E(net.network)$value >= net.quant[90]),"orange","grey")))
+    E(net.network)$color <- ifelse(E(net.network)$weight >= net.quant[99],"black",
+                                   ifelse(E(net.network)$weight < net.quant[99] & E(net.network)$weight >= net.quant[95],"red",
+                                          ifelse(E(net.network)$weight < net.quant[95] & E(net.network)$weight >= net.quant[90],"orange","blue")))
     
     ### set node size
     V(net.network)$size <- degree(net.network)/.5
@@ -912,6 +921,7 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
        conn=vol.conn.index,
        nets = network.list,
        net_df = net.df.list,
+       centrality = centrality,
        dates = date_names)
   
 }
