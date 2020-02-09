@@ -5,9 +5,6 @@ output:
     keep_md: yes
     code_folding: hide
     mathjax: default
-  html_notebook:
-    code_folding: hide
-    mathjax: default
 ---
 
 ### NOTE:
