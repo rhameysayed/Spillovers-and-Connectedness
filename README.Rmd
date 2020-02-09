@@ -5,9 +5,6 @@ output:
     output: github_document
     code_folding: hide
     mathjax: default
-  html_notebook:
-    code_folding: hide
-    mathjax: default
 ---
 
 ### NOTE:
