@@ -2,6 +2,7 @@ library(shiny)
 library(shinyWidgets)
 library(shinydashboard)
 library(shinycssloaders)
+library(shinyFiles)
 library(vars)
 library(igraph)
 library(PerformanceAnalytics)
@@ -69,7 +70,7 @@ vol.fn <- function(history){asinh(sqrt(252*0.361*log(history[,3]/lag(history[,2]
 ### the getSymbols function. Hence to track the column names
 ### and assure data integrity, the custom function is used instead.
 simple.ret <- function(closing) {100*((closing[,4]-lag(closing[,4]))/lag(closing[,4]))}
-cumulative_return <- function(closing){(closing[,4]/as.numeric(closing[1,4]))-1}
+cumulative_return <- function(closing){100*((closing[,4]/as.numeric(closing[1,4]))-1)}
 log_prices <- function(closing){log(closing[,4])}
 ### the directional.matrix function estimates the forecast error variance
 ### decomposition matrix using generalized impulse responses developed by
@@ -380,7 +381,8 @@ ui <-dashboardPage(
    
    dashboardSidebar(
      sidebarMenu(
-       checkboxGroupInput("choice","Choose One:",choices=c("Returns","Volatility"),selected = "Volatility"),
+       
+       selectInput("choice","Choose One:",choices=c("Returns","Volatility"),selected = "Volatility"),
        dateRangeInput("dateRange","Select Dates",
                       start = "2006-01-02",
                       end = "2016-11-11"),
@@ -389,15 +391,18 @@ ui <-dashboardPage(
        numericInput("windowDivider","Window Increment",value=10),
        numericInput("ar_lag","AR Lag (Days)",value=3),
        numericInput("ma_lag","MA Lag",value=10),
-       actionButton("getIt","Done")
+       actionButton("getIt","Submit")
+       
      )
    ),
    dashboardBody(
     navbarPage("",
        tabPanel(title = "Index",
                 fluidRow(
-                  plotOutput("spilloverIndex",height="800px") %>% withSpinner(color="#0dc5c1")
-                )),
+                  plotOutput("spilloverIndex",height="750px",hover="index_hover") %>% withSpinner(color="#0dc5c1")
+                ),
+                fluidRow(verbatimTextOutput("index_hover_data"))
+                ),
        tabPanel(title = "Network Visual",
                 fluidRow(uiOutput("net_dates")),
                 fluidRow(
@@ -410,27 +415,39 @@ ui <-dashboardPage(
                 )),
        tabPanel(title = "Give/Receive Table",
                 fluidRow(uiOutput("table_dates")),
-                fluidRow(tableOutput("connected_table")),
-                fluidRow(tableOutput("spillover_table"))),
+                
+                fluidRow(column(5,tableOutput("connected_table")),
+                         column(1,downloadButton("downloadConnectedness",label="Download Connectedness Table"),offset=3)),
+                       
+                fluidRow(column(5,tableOutput("spillover_table")),
+                column(1,downloadButton("downloadSpillover",label="Download Spillover Table"),offset=3))
+                ),
        tabPanel(title = "Pairwise Plot",
                 fluidRow(uiOutput("sender_tickers"),uiOutput("receiver_tickers")),
-                fluidRow(plotOutput("net_pairwise_plot")  %>% withSpinner(color="#0dc5c1"))),
+                fluidRow(plotOutput("net_pairwise_plot",hover = "net_pairwise_hover")  %>% withSpinner(color="#0dc5c1")),
+                fluidRow(verbatimTextOutput("net_pairwise_hover_data"))),
        tabPanel(title = "Data Viz",
+                fluidRow(uiOutput("data_viz_checkbox")),
                 fluidRow(plotOutput("log_price_plot")  %>% withSpinner(color="#0dc5c1")),
                 fluidRow(plotOutput("cumulative_returns")  %>% withSpinner(color="#0dc5c1")),
                 fluidRow(plotOutput("return_data_plot")  %>% withSpinner(color="#0dc5c1")),
                 fluidRow(plotOutput("vol_data_plot")  %>% withSpinner(color="#0dc5c1"))
                 ),
        tabPanel(title = "Returns Data",
-                fluidRow(tableOutput("return_table"))),
+                fluidRow(
+                  column(5,tableOutput("return_table")),
+                  column(1,downloadButton("downloadReturns",label="Download Returns Data"),offset=2))),
        tabPanel(title = "Volatility Data",
-                fluidRow(tableOutput("vol_table")))
+                fluidRow(
+                  column(5,tableOutput("vol_table")),
+                  column(1,downloadButton("downloadVolatility",label="Download Volatility Data"),offset=2)))
     )
   )
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
   output$sender_tickers <- renderUI({
     ticker_symbols <- str_split(input$stocks,",")[[1]]
     selectInput("sender","Sender",choices = ticker_symbols,selected = ticker_symbols[1])
@@ -438,6 +455,10 @@ server <- function(input, output, session) {
   output$receiver_tickers <- renderUI({
     ticker_symbols <- str_split(input$stocks,",")[[1]]
     selectInput("receiver","Receiver",choices = ticker_symbols,selected = ticker_symbols[2])
+  })
+  output$data_viz_checkbox <- renderUI({
+    ticker_symbols <- str_split(input$stocks,",")[[1]]
+    checkboxGroupInput("data_viz_check","Select Ticker to Show:",choices = ticker_symbols,selected = ticker_symbols[1],inline=TRUE)
   })
   
   ### read symbols from yahoo using getSymbols from quantmod package
@@ -484,41 +505,49 @@ server <- function(input, output, session) {
          return_vol = vol.data)
   })
   
-  output$return_table <- renderTable({
+  returns_data <- reactive({
     dat <- returns.data()
     dat[["returns"]]
+  })
+  
+  volatility_data <- reactive({
+    dat <- returns.data()
+    dat[["return_vol"]]
+  })
+  
+  output$return_table <- renderTable({
+    returns_data()
   },rownames = TRUE)
   
   output$return_data_plot <- renderPlot({
     dat <- returns.data()
-    chart.TimeSeries(dat[["returns"]],lwd=2,auto.grid=F,ylab="Return (%)",xlab="Time",
-                     main="Daily Return Percentage",lty=1,
+    chart.TimeSeries(dat[["returns"]][,input$data_viz_check],lwd=2,auto.grid=F,ylab="Return (%)",xlab="Time",
+                     main="Daily Return (%)",lty=1,
                      legend.loc="topright")
   })
   
   output$vol_table <- renderTable({
-    dat <- returns.data()
-    dat[["return_vol"]]
+    volatility_data()
   },rownames = TRUE)
   
   output$vol_data_plot <- renderPlot({
     dat <- returns.data()
-    chart.TimeSeries(dat[["return_vol"]],lwd=2,auto.grid=F,ylab="Annualized Log Volatility",xlab="Time",
+    chart.TimeSeries(dat[["return_vol"]][,input$data_viz_check],lwd=2,auto.grid=F,ylab="Annualized Log Volatility",xlab="Time",
                      main="Log Volatility",lty=1,
                      legend.loc="topright")
   })
   
   output$log_price_plot <- renderPlot({
     dat <- returns.data()
-    chart.TimeSeries(dat[["log_price"]],lwd=2,auto.grid=F,ylab="Log Prices",xlab="Time",
+    chart.TimeSeries(dat[["log_price"]][,input$data_viz_check],lwd=2,auto.grid=F,ylab="Log Prices",xlab="Time",
                      main="Log Prices",lty=1,
                      legend.loc="topright")
   })
   
   output$cumulative_returns <- renderPlot({
     dat <- returns.data()
-    chart.TimeSeries(dat[["cum_returns"]],lwd=2,auto.grid=F,ylab="Cumulative Returns",xlab="Time",
-                     main="Returns (%)",lty=1,
+    chart.TimeSeries(dat[["cum_returns"]][,input$data_viz_check],lwd=2,auto.grid=F,ylab="Cumulative Returns",xlab="Time",
+                     main="Cumulative Returns (%)",lty=1,
                      legend.loc="topright")
   })
   
@@ -558,10 +587,6 @@ server <- function(input, output, session) {
   
   
   model_run <- eventReactive(input$getIt,{
-    # req(input$window)
-    # req(input$windowDivider)
-    # req(input$ar_lag)
-    # req(input$ma_lag)
     
     dat <- returns.data()
     if(input$choice == "Returns"){
@@ -610,16 +635,23 @@ server <- function(input, output, session) {
     
   })
   
-  output$connected_table <- renderTable({
+  conn_table <- reactive({
     dat <- model_run()
     tables <- dat[["net_df"]]
     tables[[as.character(input$table_dates)]][["table"]]
+  })
+  output$connected_table <- renderTable({
+    conn_table()
   },rownames = TRUE)
   
-  output$spillover_table <- renderTable({
+  spill_table <- reactive({
     dat <- model_run()
     tables <- dat[["spillover_table"]]
     tables[[as.character(input$table_dates)]][["table"]]
+  })
+  
+  output$spillover_table <- renderTable({
+    spill_table()
   },rownames = TRUE)
   
   
@@ -652,6 +684,15 @@ server <- function(input, output, session) {
       ylab("Connectedness")
   })
   
+  output$net_pairwise_hover_data <- renderText({
+    
+    xy_str <- function(e) {
+      if(is.null(e)) return("NULL\n")
+      paste0("Date=", as.Date(as.POSIXct(e$x,origin="1970-01-01",format="%Y-%m-%d",tz="UTC")), " Index=", round(e$y,2), "\n")
+    }
+    xy_str(input$net_pairwise_hover)
+  })
+  
   net.net <- reactive({
     nets <- model_run()
     nets[["nets"]]
@@ -677,7 +718,6 @@ server <- function(input, output, session) {
      colnames(vol.conn.index.df) = c("Index")
      ### .xts object
      vol.conn.index.df$Date <- as.POSIXct(rownames(vol.conn.index.df),format="%Y-%m-%d")
-     vol.conn.index.xts <- xts(vol.conn.index.df[,-2],order.by=vol.conn.index.df[,2])
      
      ############## SPILLOVER ###################
      fevd.list.out <- index[["spill"]]
@@ -685,19 +725,71 @@ server <- function(input, output, session) {
      fevd.df <- data.frame(unlist(fevd.list.out))
      colnames(fevd.df) = c("Index")
      fevd.df$Date <- as.POSIXct(rownames(fevd.df),format="%Y-%m-%d")
-     fevd.xts <- xts(fevd.df[,-2],order.by=fevd.df[,2])
      
      ### compare the two index measures
-     indice = merge.all(vol.conn.index.xts,fevd.xts)
-     colnames(indice) = c("Connectedness","Spillover")
+     indice = merge(vol.conn.index.df,fevd.df,by="Date")
+     colnames(indice) = c("Date","Connectedness","Spillover")
      indice
    })
    
    output$spilloverIndex <- renderPlot({
-     chart.TimeSeries(indexes(),lwd=2,auto.grid=F,ylab="Index",xlab="Time",
-                      main="Comparing Spillover Index levels",lty=1,
-                      legend.loc="topright")
+     dat <- indexes()
+     dat <- xts(dat[,-1],order.by=dat[,1])
+     
+     ggplot(dat) + 
+       geom_line(aes(x=Index,y=Connectedness,colour="Connectedness"),size=1.2) +
+       geom_line(aes(x=Index,y=Spillover,colour="Spillover"),size=1.2) + theme_bw() +
+       theme(legend.position = "bottom",legend.title = element_blank(),text = element_text(size=20)) + 
+       xlab("Time") + ylab("Connectedness/Spillover Index") +
+       scale_color_manual(values = c("black","red"))
    })
+   
+   output$index_hover_data <- renderText({
+    
+       xy_str <- function(e) {
+         if(is.null(e)) return("NULL\n")
+         paste0("Date=", as.Date(as.POSIXct(e$x,origin="1970-01-01",format="%Y-%m-%d",tz="UTC")), " Index=", round(e$y,2), "\n")
+       }
+       xy_str(input$index_hover)
+   })
+   
+   output$downloadConnectedness <- downloadHandler(
+     filename = function() {
+       paste("Connectedness-",as.character(input$table_dates), ".csv", sep = "")
+     },
+     content = function(file){
+       write.csv(conn_table(), file,row.names = TRUE)
+     }
+   )
+   
+   output$downloadSpillover <- downloadHandler(
+     filename = function() {
+       paste("Spillover-",as.character(input$table_dates), ".csv", sep = "")
+     },
+     content = function(file) {
+       
+       write.csv(spill_table(), file,row.names = TRUE)
+     }
+   )
+   
+   output$downloadReturns <- downloadHandler(
+     filename = function() {
+       "Returns.csv"
+     },
+     content = function(file){
+       write.csv(returns_data(), file,row.names = TRUE)
+     }
+   )
+   
+   output$downloadVolatility <- downloadHandler(
+     filename = function() {
+       "Volatility.csv"
+     },
+     content = function(file) {
+       
+       write.csv(volatility_data(), file,row.names = TRUE)
+     }
+   )
 }
 
 # Run the application 

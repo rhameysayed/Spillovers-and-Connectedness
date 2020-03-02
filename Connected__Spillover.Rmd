@@ -14,9 +14,19 @@ The dashboard which this vignette supports can be found here: [Dashboard](https:
 
 Also the full code is on [Github](https://github.com/rhameysayed/Spillovers-and-Connectedness)
 
-## Secton 1: Introduction
+## Section 1: Introduction
 
-This vignette combines and replicates the work done in [Dieblod and Yilmaz 2009](http://www.ssc.upenn.edu/~fdiebold/papers/paper75/DY2final.pdf), [DY 2010](http://www.ssc.upenn.edu/~fdiebold/papers/paper99/DirectionofSpillovers_Mar10.pdf), and [DY 2011](http://www.ssc.upenn.edu/~fdiebold/papers/paper106/dieboldandyilmaz2011.pdf), as well as scaling the methods for quick application and replication. The DY papers describe how to quantify in an index how much error in a forecast can be attributed to shocks to the error terms of each dependent variable in vector autoregression. These "spillovers" are found using standard time-series techniques for finding impulse-response functions and forecast error variance decompositions. In addition, DY 2011 show how the effects of these shocks can be represented as a network when one relaxes the assumptions that vector autoregressions have normally distributed, i.i.d. error terms and that shocks to each variable must be orthongonal to the other shocks. In the spirit of DY 2011, stocks of large banks and AIG will be the subjects of analysis. Like all the DY publications, the analysis will focus on connections and spillovers of volatility.
+### Section 1.1: An Analogy
+
+Imagine a container full of particles bouncing around. We can measure the energy of the entire container and the amount of energy of each individual particle. But what if we want to measure the effect of one particle's energy on other particles? The entire system? If we assume there is one particle with the highest amount of energy we can conclude the particles nearest to it derive a some of their energy from that highest energy particle and those particles pass it to the ones near them and so on. If we want to predict the energy of one of these particles we would be misled if we did not consider the particles nearby and only analyzed each particle individually as an independent observation. 
+
+If we replace particles with stock prices, and energy with volatility of stock returns, then our container becomes an index of stocks. We expect stocks within the same industry to be correlated with each other (i.e. to share energy), and some stocks to "share" their volatility with some more than others. Measuring and predicting the volatility in returns of each stock independently will similarly miss other drivers as in the particle example. 
+
+Standard statistical and econometric methods such (vector) autoregressions assume (or impose) independence of variables, but it will be shown below that relaxing the assumption of independence does not improve a method's forecast but it does enable researchers to better isolate other drivers of volatility in stock price return volatility. It is clear that in the world of finance, especially the stock market, the choice of variables matters because financial variables are often highly correlated and it is feasible to imagine the price oil being correlated with Google's stock price for instance. Hence it is very important that the selection of variables be correlated with reason. 
+
+### Section 1.2 Overview
+
+This vignette combines and replicates the work done in [Dieblod and Yilmaz 2009](http://www.ssc.upenn.edu/~fdiebold/papers/paper75/DY2final.pdf), [DY 2010](http://www.ssc.upenn.edu/~fdiebold/papers/paper99/DirectionofSpillovers_Mar10.pdf), and [DY 2011](http://www.ssc.upenn.edu/~fdiebold/papers/paper106/dieboldandyilmaz2011.pdf), as well as scaling the methods for quick application and replication. The DY papers describe how to quantify in an index the amount of forecast error that can be attributed to shocks of the error terms of each dependent variable in vector autoregression. Consider a set of stocks for which we want to estimate and forecast either returns or volatility, and control for the systematic, or common, factor driving each one, then whatever cannot be explained by common factors is idiosyncratic error. Then an interesting question to ask is whether these idiosyncratic errors of some stocks can effect the forecast others. In other words, do idiosyncratic errors spillover into common factors' ability to forecast? These "spillovers" are found using standard time-series techniques for finding impulse-response functions and forecast error variance decompositions. In addition, DY 2011 show how the effects of these shocks can be represented as a network when one relaxes the assumptions that vector autoregressions have normally distributed, i.i.d. error terms and that shocks to each variable must be orthogonal to the other shocks. In the spirit of DY 2011, stocks of large banks and AIG will be the subjects of analysis. Like all the DY publications, the analysis will focus on connections and spillovers of volatility.
 
 This vignette will proceed as follows: Section 2 will describe the data source and summarize the data; Section 3 will motivate the concepts of spillovers and connectedness using a analysis of the entire sample of data; Section 4 will use a rolling window over the time-series data, applying the same concepts from the full sample analysis to derive an index of spillover/conncectedness and measure behavior of the network over time; Section 5 will apply the methods developed to study the effect of the dollar exchange rate on the Collateralized Loan Obligation (CLO) market building on research from [Niepmann & Schmidt-Eisenlohr](https://voxeu.org/article/when-dollar-appreciates-us-corporate-credit-tightens).
 
@@ -31,14 +41,14 @@ The data is pulled from Yahoo! Finance using the getSymbols() function from the 
 
 To analyze the volatility of closed-end funds the minimum price is observed at $t-1$, since High, Low, Open, and Close prices on any given day are the same for these funds. Hence, returns and volatilities for these funds would be zero when using prices recorded on the same day.
 
-Since voltatilities tend to be skewed, it is common practice to use log-volatilites which closely approximate a normal distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of the natual logarithm ($sinh^{-1}(x) = log(2x)$). 
+Since volatilities tend to be skewed, it is common practice to use log-volatilities which closely approximate a normal distribution. However, to control for instances when volatility is zero, $sinh^{-1}$ is used instead of the natural logarithm ($sinh^{-1}(x) = log(2x)$). 
 
 \begin{equation} 
   \sigma_{it} = sinh^{-1}(\sqrt{252*\sigma^2_{it}})
   \label{eq:stdev}
 \end{equation}
 
-Using the quantmod getSymbols function, read in the set of stock prices for Barclays (BK), Bank of Nova Scota (BNS), TD Bank (TD), Well Fargo (WFC), Goldman Sachs (GS), JP Morgan Chase & Co. (JPM), Morgan Stanley (MS), Bank of America (BAC), Credit Suisse (CS), Deutsche Bank (DB), HSBC, Citibank (C), and AIG over time period spanning January 2, 2006 to December 30 2016. This time period capture the run up, aftermath, and recovery of the 2008 financial . The daily volatilities which are shown in Figure (\@ref(fig:annvol)) and summarized in Table 1.
+Using the quantmod getSymbols function, read in the set of stock prices for Barclays (BK), Bank of Nova Scotia (BNS), TD Bank (TD), Well Fargo (WFC), Goldman Sachs (GS), JP Morgan Chase & Co. (JPM), Morgan Stanley (MS), Bank of America (BAC), Credit Suisse (CS), Deutsche Bank (DB), HSBC, Citibank (C), and AIG over time period spanning January 2, 2006 to December 30 2016. This time period capture the run up, aftermath, and recovery of the 2008 financial crisis. The daily volatilities which are shown in Figure (\@ref(fig:annvol)) and summarized in Table 1.
 
 ```{r echo=FALSE,message=FALSE,warning=FALSE}
 source("C:\\Users\\Rhamey\\Desktop\\financeR\\spillover_connectedness_functions.R")
@@ -84,7 +94,7 @@ chart.TimeSeries(vol.data,lwd=2,auto.grid=F,ylab="Annualized Log Volatility",xla
 ## Section 3: Full Sample Analysis
 ## Section 3.1: Basic Time-Series: VAR(p), MA(q), Impulse-Response, Forecast Error Variance
 
-In time-series analysis (and most regressions generally) the most interesting information is found in the distribution of the error terms, especially the variance. In a multivariate model the distibution of error terms embeds the assumptions made regarding correlations of dependent variables (i.e. a diagonal covariance matrix assumes independence). In financial econometrics forecasting stock price returns or volatility entails two components - systematic and idiosyncratic - codified as a regression:
+In time-series analysis (and most regressions generally) the most interesting information is found in the distribution of the error terms, especially the variance. In a multivariate model the distribution of error terms embeds the assumptions made regarding correlations of dependent variables (i.e. a diagonal covariance matrix assumes independence). In financial econometrics forecasting stock price returns or volatility entails two components - systematic and idiosyncratic - codified as a regression:
 
 \begin{align}
   \sigma_{it} = \beta \sigma_{M,t-1} + \epsilon_{it}
@@ -98,7 +108,7 @@ To derive a measure of these spillovers, the calculations proceed in four steps:
 ## Section 3.2: Full Sample Spillover Table
 ### Step 1. Vector Autoregression (VAR)
 
-The difference between spillovers and connectedness in the DY papers is the difference between assuming errors are orthogonal versus correlated. To estimate a model with correlated errors is as simple as feeding a VAR the set of variables one wants to analyze. To estimate a model with orthogonal errors using variables which are correlated requires imposing a structure on the VAR to achieve independent error terms. The vars package in R has  a VAR and an SVAR function [vars](https://cran.r-project.org/web/packages/vars/vars.pdf) The SVAR function estimates a Structural VAR by giving it a matrix with strucutred according to a set of assumptions. For this excercis I used a lower triangular matrix of coefficients (with 1s along the diagonal) as the [Sims critique stipulates](https://www.pauldeng.com/pdf/Sims%20macroeconomics%20and%20reality.pdf). For a quick overview of Sims see [Section 11.4.2 of Zivot](https://faculty.washington.edu/ezivot/econ584/notes/varModels.pdf).
+The difference between spillovers and connectedness in the DY papers is the difference between assuming errors are orthogonal versus correlated. To estimate a model with correlated errors is as simple as feeding a VAR the set of variables one wants to analyze. To estimate a model with orthogonal errors using variables which are correlated requires imposing a structure on the VAR to achieve independent error terms. The vars package in R has VAR and SVAR functions [vars](https://cran.r-project.org/web/packages/vars/vars.pdf) The SVAR function estimates a Structural VAR by giving it a matrix that is structured according to a set of assumptions. For this excercise I used a lower triangular matrix of coefficients with 1s along the diagonal as the [Sims critique stipulates](https://www.pauldeng.com/pdf/Sims%20macroeconomics%20and%20reality.pdf). For a quick overview of Sims see [Section 11.4.2 of Zivot](https://faculty.washington.edu/ezivot/econ584/notes/varModels.pdf).
 
 ```{r}
 vol_var = VAR(vol.data,p=3,type="none")
@@ -111,7 +121,7 @@ svar_ecov <- vol_svar$Sigma.U
 ```
 
 ### Step 2. Moving Average Representation
-Generally speaking an type of autoregession of order $p$ can be converted to a moving average of order $q$ as long as the coefficients of the $AR(p)$ are between -1 and 1. The vars package includes a function Phi which will do this conversion for us by specifying the ordoer $q$ of MA we want - in this case 10. From this estimate the MA coefficients are retrieved, along with the residual errors from the VAR, for the next steps.
+Generally speaking an type of autoregression of order $p$ can be converted to a moving average of order $q$ as long as the coefficients of the $AR(p)$ are between -1 and 1. The vars package includes a function Phi which will do this conversion for us by specifying the ordoer $q$ of MA we want - in this case 10. From this estimate the MA coefficients are retrieved, along with the residual errors from the VAR, for the next steps.
 ```{r}
 MA_lag <- 10
 theta_temp <- Phi(vol_var,nstep = MA_lag)
@@ -127,7 +137,7 @@ For the SVAR, the function fevd.matrix in the code snippet implements the IRF an
 
 ### Step 4. Forecast Error Variance Decomposition (FEVD)
 
-Mulitplying each lag of MA cofficients by the Cholesky matrix, the FEVD is estimated. Picking out the row of MA coefficients for variable $j$ and multiplying those by the shocks from variable $i$ as shown in the formula below. The results are shown in Table 2 - the Spillover Table. (Note: the rows sum to 1 as expected, so we know the calculations are correct)
+Multiplying each lag of MA coefficients by the Cholesky matrix, the FEVD is estimated. Picking out the row of MA coefficients for variable $j$ and multiplying those by the shocks from variable $i$ as shown in the formula below. The results are shown in Table 2 - the Spillover Table. (Note: the rows sum to 1 as expected, so we know the calculations are correct)
 
 \begin{equation}
   \theta^o_{ij} = \frac{\sum^n_{l=0} (e'_i A_l P e_j)^2}{\sum^n_{l=0} (e'_i A_l \Sigma A'_l e_i)}
@@ -193,7 +203,7 @@ Connectedness requires similar calculations, except that the shocks from IRF are
   \label{eq:gfevd}
 \end{equation}
 
-The interpretaion of the numerator and denominator is the same as in the orthogonal case. The Connectedness Table is shown in Table 3.
+The interpretation of the numerator and denominator is the same as in the orthogonal case. The Connectedness Table is shown in Table 3.
 
 ```{r echo=FALSE, message=FALSE}
 directional.matrix <- function(resid.var,ma.coef){
@@ -250,7 +260,7 @@ The interpretation of connectedness is slightly different from spillovers. The c
 
 ## Section 3.4: Full Sample FEVD as a Network
 
-DY 2011 demonstrates that net pairwise FEVD (transpose of the connectedness table less the connectedness table) defines a weighted, directed network. Thus the connectedness table can be transformed into a net pairwise connectedness network as shown Figure (\@ref(fig:fullNet)). (To see how the network evolves over time, use the app [here](https://rhamey-sayed.shinyapps.io/SpilloversConnectedness/) and click on the Network Visual tab.)
+DY 2011 demonstrates that net pairwise FEVD (transpose of the connectedness table less the connectedness table) defines a weighted, directed network. Thus the connectedness table can be transformed into a net pairwise connectedness network as shown Figure (\@ref(fig:fullNet)) (To see how the network evolves over time, use the app [here](https://rhamey-sayed.shinyapps.io/SpilloversConnectedness/) and click on the Network Visual tab.). Each edge shown in the graph represents a node giving volatility to another node. The connections with strength in the top tenth percentile are shown in the graph below. The four largest contributors in the network are Citibank, AIG, Morgan Stanley, and Bank of America. Citibank had been the largest bank by assets and was largely exposed to derivatives marekt, as was AIG to the extent that it went bankrupt and had to taken over by the US Treasury, Bank of America bought brankrupt Merrill Lynch, and Morgan Stanley had a similar business model to Merrill Lynch and was likely expected to go bankrupt as well during the crisis.
 
 ```{r fullNet, echo=FALSE, message=FALSE, fig.width=9,fig.height=9,fig.cap="Full Sample, Net Pairwise Connectedness"}
 net.mat = t(D) - D
@@ -261,7 +271,7 @@ colnames(net.melt)[3] <- "weight"
 ### calculate each percentile of the net pairwise connectedness values
 ### and choose only the top 10%
 net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
-new.net1 <- net.melt[net.melt$weight >= net.quant[75],]
+new.net1 <- net.melt[net.melt$weight >= net.quant[85],]
 new.net <- new.net1[new.net1[,1] != new.net1[,2],]
 
 ### create igraph graph
@@ -280,13 +290,14 @@ V(net.network)$size <- degree(net.network)/.5
 
 plot(net.network,layout=layout.circle(net.network),
      main="Firm Connectedness \n (Daily Return Volatility)",
-     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 25th percentile \n node size: number of edeges connected to the node")
+     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 15th percentile \n node size: number of edeges connected to the node")
 
 ```
 
+
 ## Section 4: Rolling Window - Spillover Vs. Connected
 
-To apply the methods shown above to a rolling window, it is neccessary to only define the size of the rolling window, the size of the increment to move the window, the order $q$ of $MA(q)$, and the number lags in the VAR/SVAR, then loop over the data set. The function vector_autoreg in the code snippet takes in the an .xts data frame, window size, increment, AR lag order, and MA lag order. The example below uses a window of 100 days, incrementing 10 days, with $p = 3$ and $q = 10$. It also calls on function "make.table" (to make the spillover and connectedness table) and "normalize" (to normalize the connectedness table) which can be found in the function script on the GitHub page.
+To apply the methods shown above to a rolling window, it is necessary to only define the size of the rolling window, the size of the increment to move the window, the order $q$ of $MA(q)$, and the number lags in the VAR/SVAR, then loop over the data set. The function vector_autoreg in the code snippet takes in the an .xts data frame, window size, increment, AR lag order, and MA lag order. The example below uses a window of 100 days, incrementing 10 days, with $p = 3$ and $q = 10$. It also calls on function "make.table" (to make the spillover and connectedness table) and "normalize" (to normalize the connectedness table) which can be found in the function script on the GitHub page.
 
 ```{r echo=FALSE, message=FALSE}
 vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
@@ -448,7 +459,7 @@ Figure (\@ref(fig:indexes)) shows the percentage of the 10-day ahead forecast er
 
 Using the time-series of connectedness and spillover tables it is also possible to see how much volatility each stock gave or received, and which ones were net givers/receivers of volatility over time as in Figures (\@ref(fig:volGive)) - (\@ref(fig:volNet)). As with the indexes, the red lines are the spillover measures and the black lines are connectedness.
 
-These results show the consequences of the assumptions behind the SVAR and VAR models. During the run up to the 2008 financial crisis and in its wake, AIG underwrote several option contracts for various asset-backed securities with the large banks. However, the SVAR does not pick up on that connection, unlike the "non-orthogonal" VAR, and instead estimates a lower net volatility spillover of AIG stock price to the other prices. A likely reason is that SVARs are sensitive to the ordering of variables used to satisfy the normality assumption, and, perhaps, a different ordering would deliver a different result.
+These results show the consequences of the assumptions behind the SVAR and VAR models. During the run up to the 2008 financial crisis and in its wake, AIG underwrote several option contracts for various asset-backed securities with the large banks and its volatility "giving" (the black line) spikes during that time period. However, the SVAR (red line) does not pick up on that connection, unlike the "non-orthogonal" VAR, and instead estimates a lower net volatility spillover of AIG stock price to the other volatilities. A likely reason is that SVARs are sensitive to the ordering of variables used to satisfy the normality assumption, and, perhaps, a different ordering would deliver a different result.
 
 ```{r}
 
@@ -560,7 +571,7 @@ ggplot(pairwise_data,aes(x=Time,y=Connectedness,group=1)) +
 
 ## Section 5: Monetary Transmission
 
-Research from [Niepmann & Schmidt-Eisenlohr](https://voxeu.org/article/when-dollar-appreciates-us-corporate-credit-tightens) shows that when the US dollar appreciates business loan terms tighten. The main reason for this is that banks often package and sell their business loans in capital markets to Collateralized Loan Obligations (CLO), insurance companies, mutual funds, hedge funds, and sometimes other banks, which typically have exposure to foreign exchange markets. Hence, when the dollar appreciates these entities will buy fewer business loans, and this lack of demand causes banks to tighten loan terms so as to offer better returns in the capital markets. According to Niepmann & Schmidt-Eisenlohr, this phenomenon is strongest among emerging market currencies. This development is significant for several reasons, but perhaps the most salient point is that accroding to economic theory currency appreciation is associated with higher asset returns (i.e. interest rates), as Figure (\@ref(fig:krugman)) from [Krugman, Obstfeld, and Melitz](https://www.amazon.com/International-Economics-Theory-Policy-Pearson/dp/0133423646) demonstrates:
+Research from [Niepmann & Schmidt-Eisenlohr](https://voxeu.org/article/when-dollar-appreciates-us-corporate-credit-tightens) shows that when the US dollar appreciates business loan terms tighten. The main reason for this is that banks often package and sell their business loans in capital markets to Collateralized Loan Obligations (CLO), insurance companies, mutual funds, hedge funds, and sometimes other banks, which typically have exposure to foreign exchange markets. Hence, when the dollar appreciates these entities will buy fewer business loans, and this lack of demand causes banks to tighten loan terms so as to offer better returns in the capital markets. According to Niepmann & Schmidt-Eisenlohr, this phenomenon is strongest among emerging market currencies. This development is significant for several reasons, but perhaps the most salient point is that according to economic theory currency appreciation is associated with lower asset reterns (i.e. lower interest rates), as Figure (\@ref(fig:krugman)) from [Krugman, Obstfeld, and Melitz](https://www.amazon.com/International-Economics-Theory-Policy-Pearson/dp/0133423646) demonstrates:
 
 ```{r krugman, fig.cap="Exchange Rates, Interest Rates, and Money Supply"}
 knitr::include_graphics("C:\\Users\\Rhamey\\Desktop\\financeR\\ConnectedNess\\krugman_obstfeld.png")
@@ -577,7 +588,7 @@ tickerTable <- data.frame(Ticker=tickers,Description=desc)
 kable(tickerTable,caption = "Stocks and Funds") %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 
-Using the same inputs for the rolling window size, window increment, AR lag, MA order, spillovers and connectedness are calculated over the time period spanning April 2, 2012 to January 31, 2020. Charts summaring (log) price, cumulative returns, annualized daily volatility, and daily returns are shown in Figures \@ref(fig:logp) - \@ref(fig:cloret)
+Using the same inputs for the rolling window size, window increment, AR lag, MA order, spillovers and connectedness are calculated over the time period spanning April 2, 2012 to January 31, 2020. Charts summarisng the (log) price, cumulative returns, annualized daily volatility, and daily returns are shown in Figures \@ref(fig:logp) - \@ref(fig:cloret)
 
 ```{r echo=FALSE,message=FALSE,warning=FALSE}
 tickers <- tickers[order(tickers)]
@@ -692,7 +703,7 @@ colnames(net.melt)[3] <- "weight"
 ### calculate each percentile of the net pairwise connectedness values
 ### and choose only the top 10%
 net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
-new.net1 <- net.melt[net.melt$weight >= net.quant[75],]
+new.net1 <- net.melt[net.melt$weight >= net.quant[85],]
 new.net <- new.net1[new.net1[,1] != new.net1[,2],]
 
 ### create igraph graph
@@ -711,8 +722,10 @@ V(net.network)$size <- degree(net.network)/.5
 
 plot(net.network,layout=layout.circle(net.network),
      main="Firm Connectedness \n (intra day return volatility)",
-     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 25th percentile \n node size: number of edeges connected to the node")
+     xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 15th percentile \n node size: number of edeges connected to the node")
 ```
+
+Figure (\@ref(fig:monetarynet)) shows the connections in the top tenth percentile. Table 5 shows that the price of oil is the main driver of this system, followed by Citibank, JPM, and OXLC.
 
 ### Volatility Index
 
@@ -747,7 +760,7 @@ chart.TimeSeries(indice,lwd=2,auto.grid=F,ylab="Index",xlab="Time",
 
 ### Net Volatility Connectedness
 
-Figure (\@ref(fig:monetarynetvol)) of the net volatility spillovers shows why blindly assuming uncorrelated errors is never wise. The prices of VCSH, FFRHX, and BSCK show hardly any signs of life, but the FEVD from the orthogonal SVAR of these ETFs is high and volatile. In almost every other instance, the SVAR assigns an asset as giver (receiver) of volatility when the "non-orthogonal" VAR assigns the same asset as a receiver (giver). After considering these graphs, it is all the more surprising that both the Connectedness and Spillover indexes track each other as well as they do.
+Figure (\@ref(fig:monetarynetvol)) of the net volatility spillovers shows why even impsoing independence on correlated variables is not always feasible. The prices of VCSH, FFRHX, and BSCK show hardly any signs of life, but the FEVD from the orthogonal SVAR of these ETFs is high and volatile. In almost every other instance, the SVAR assigns an asset as giver (receiver) of volatility when the non-orthogonal VAR assigns the same asset as a receiver (giver).  After considering these graphs, it is all the more surprising that both the Connectedness and Spillover indexes track each other as well as they do. Overall, using a non-orthogonal VAR does not necessarily reduce the total amount of error in a forecast but it does capture the key drivers of forecast errors.
 
 ```{r monetarynetvol, fig.width=14,fig.height=12,fig.cap="Monetary Transmission Connectedness"}
 
