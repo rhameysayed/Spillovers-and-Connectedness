@@ -341,7 +341,7 @@ vector_autoreg <- function(theData.xts,window=100,iter=10,ar_lag=3,ma_lag=10){
     ### calculate each percentile of the net pairwise connectedness values
     ### and choose only the top 10%
     net.quant <- quantile(net.melt$weight,prob=seq(0,1,by=0.01))
-    new.net1 <- net.melt[net.melt$weight > net.quant[75],]
+    new.net1 <- net.melt[net.melt$weight >= net.quant[90],]
     new.net <- new.net1[new.net1[,1] != new.net1[,2],]
     
     ### create igraph graph
@@ -703,7 +703,7 @@ server <- function(input, output, session) {
     nets <- netnets[[as.character(input$net_dates)]]
     plot.igraph(nets,layout=layout.circle(nets),
          main="Firm Connectedness \n (intra day return volatility)",
-         xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n blue: 25th percentile \n node size: number of edeges connected to the node")
+         xlab = "black: 1st percentile \n red: 5th percentile \n orange: 10th percentile \n node size: number of edeges connected to the node")
     
   })
    
