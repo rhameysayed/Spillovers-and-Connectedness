@@ -123,6 +123,7 @@ fevd.matrix <- function(resid.var,ma.coef){
   ### each column in ei and ej is a vector with unity at the i/jth element
   ### see equation 2.7 in Pesaran and Shin (1997)
   Qinv <- t(chol(resid.var))
+  cov.error <- cov(resid.var)
   
   nobs <- dim(Qinv)[1]
   ei <- diag(nobs)
