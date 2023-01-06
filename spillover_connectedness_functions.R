@@ -73,7 +73,7 @@ vol.fn <- function(history){log(100*sqrt(252*0.361*log(history[,3]/history[,2])^
 ### eliminates the names of the columns which have been reordered by 
 ### the getSymbols function. Hence to track the column names
 ### and assure data integrity, the custom function is used instead.
-simple.ret <- function(closing) {100*((closing[,4]-lag(closing[,4]))/lag(closing[,4]))}
+simple.ret <- function(closing) {100*((closing[,4]-stats::lag(closing[,4]))/stats::lag(closing[,4]))}
 
 ### the directional.matrix function estimates the forecast error variance
 ### decomposition matrix using generalized impulse responses developed by
