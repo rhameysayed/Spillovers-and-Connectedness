@@ -69,7 +69,7 @@ vol.fn <- function(history){asinh(sqrt(252*0.361*log(history[,3]/lag(history[,2]
 ### eliminates the names of the columns which have been reordered by 
 ### the getSymbols function. Hence to track the column names
 ### and assure data integrity, the custom function is used instead.
-simple.ret <- function(closing) {100*((closing[,4]-lag(closing[,4]))/lag(closing[,4]))}
+simple.ret <- function(closing) {100*((closing[,4]-stats::lag(closing[,4]))/stats::lag(closing[,4]))}
 cumulative_return <- function(closing){100*((closing[,4]/as.numeric(closing[1,4]))-1)}
 log_prices <- function(closing){log(closing[,4])}
 ### the directional.matrix function estimates the forecast error variance
