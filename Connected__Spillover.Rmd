@@ -65,7 +65,7 @@ getSymbols(tickers1,src="yahoo",from=as.POSIXct(start_date),to=as.POSIXct(end_da
 
 ### Calculate daily volatility using Open and Close prices
 ### This formula is found in section 3 of DY 2010
-vol.fn <- function(history){asinh(sqrt(252*0.361*log(history[,3]/lag(history[,2]))^2))}
+vol.fn <- function(history){asinh(sqrt(252*0.361*log(history[,3]/stats::lag(history[,2]))^2))}
 vol1 <- lapply(data1,vol.fn)
 
 ## combine each ticker's xts object into one xts object
